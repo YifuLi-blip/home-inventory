@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 先验证邮箱：否则别人可以抢先用家人的邮箱注册，冒充成员。
+    function verifiedEmail() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+
+    function isMember(householdId) {
+      return verifiedEmail()
+        && request.auth.token.email in get(/databases/$(database)/documents/households/$(householdId)).data.memberEmails;
+    }
+
+    function validHousehold(data) {
+      return data.keys().hasOnly(['name', 'ownerUid', 'ownerEmail', 'memberEmails', 'createdAt'])
+        && data.keys().hasAll(['name', 'ownerUid', 'ownerEmail', 'memberEmails', 'createdAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 40
+        && data.memberEmails is list && data.memberEmails.size() <= 20
+        && data.ownerEmail in data.memberEmails;
+    }
+
+    function validItem(data) {
+      return data.keys().hasOnly(['name', 'category', 'location', 'quantity', 'unit', 'minimum', 'expiryDate', 'updatedAt', 'updatedBy'])
+        && data.keys().hasAll(['name', 'category', 'location', 'quantity', 'unit', 'minimum', 'expiryDate', 'updatedAt', 'updatedBy'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 80
+        && data.category is string && data.category.size() <= 30
+        && data.location is string && data.location.size() <= 80
+        && data.unit is string && data.unit.size() <= 12
+        && data.quantity is number && data.quantity >= 0
+        && data.minimum is number && data.minimum >= 0
+        && (data.expiryDate == null
+            || (data.expiryDate is string && data.expiryDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+        && data.updatedAt == request.time
+        && data.updatedBy == request.auth.uid;
+    }
+
+    match /households/{householdId} {
+      allow read: if verifiedEmail() && request.auth.token.email in resource.data.memberEmails;
+
+      allow create: if verifiedEmail()
+        && validHousehold(request.resource.data)
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail == request.auth.token.email
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if verifiedEmail()
+        && request.auth.token.email in resource.data.memberEmails
+        && validHousehold(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'memberEmails']);
+
+      match /items/{itemId} {
+        allow read, delete: if isMember(householdId);
+        allow create, update: if isMember(householdId) && validItem(request.resource.data);
+      }
+    }
+  }
+}
