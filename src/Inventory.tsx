@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { AppHeader, Dialog, Empty, Toast } from './Common';
 import * as data from './data';
 import {
   CATEGORIES, expiryState, filterItems, formatExpiry, iconFor, isExpiring, isLow,
-  localDate, normalizeEmail, sortItems, type ViewFilter,
+  localDate, sortItems, type ViewFilter,
 } from './logic';
 import type { Account, Household, Item, ItemInput } from './types';
 
@@ -14,9 +15,7 @@ export function Inventory({ account, household }: { account: Account; household:
   const [category, setCategory] = useState('全部');
   const [view, setView] = useState<ViewFilter>('all');
   const [editing, setEditing] = useState<Editing>(null);
-  const [showMembers, setShowMembers] = useState(false);
   const [toast, setToast] = useState('');
-  const online = useOnline();
   const today = localDate();
 
   useEffect(
@@ -40,20 +39,12 @@ export function Inventory({ account, household }: { account: Account; household:
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div className="topbar-row">
-          <div className="brand"><span className="brand-mark">存</span><span>{household.name}</span></div>
-          <button className="avatar" onClick={() => setShowMembers(true)} aria-label="成员与账号">
-            {account.email.charAt(0).toUpperCase()}
-          </button>
-        </div>
+      <AppHeader account={account} household={household}>
         <label className="search">
           <span aria-hidden="true">⌕</span>
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索物品、位置或分类" aria-label="搜索" />
         </label>
-      </header>
-
-      {!online && <p className="offline">离线中，改动会在联网后自动同步</p>}
+      </AppHeader>
 
       <section className="content">
         <div className="stats-grid">
@@ -105,8 +96,7 @@ export function Inventory({ account, household }: { account: Account; household:
           }}
         />
       )}
-      {showMembers && <MembersDialog account={account} household={household} onClose={() => setShowMembers(false)} />}
-      {toast && <button className="toast" onClick={() => setToast('')}>{toast}</button>}
+      <Toast message={toast} onClose={() => setToast('')} />
     </main>
   );
 }
@@ -180,69 +170,4 @@ function ItemDialog({ item, locations, onClose, onSave, onDelete }: {
       </form>
     </Dialog>
   );
-}
-
-function MembersDialog({ account, household, onClose }: { account: Account; household: Household; onClose: () => void }) {
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-
-  async function save(memberEmails: string[]) {
-    setError('');
-    try { await data.saveMembers(household.id, memberEmails); }
-    catch { setError('保存失败，成员管理需要联网。'); }
-  }
-
-  function add(event: FormEvent) {
-    event.preventDefault();
-    const next = normalizeEmail(email);
-    if (household.memberEmails.includes(next)) { setError('这个邮箱已经是成员。'); return; }
-    setEmail('');
-    void save([...household.memberEmails, next]);
-  }
-
-  return (
-    <Dialog title="家庭成员" onClose={onClose}>
-      <ul className="members">
-        {household.memberEmails.map((member) => (
-          <li key={member}>
-            <span>{member}{member === account.email && ' （我）'}</span>
-            {member !== household.ownerEmail && <button onClick={() => void save(household.memberEmails.filter((entry) => entry !== member))} aria-label={`移除 ${member}`}>移除</button>}
-          </li>
-        ))}
-      </ul>
-      <form onSubmit={add} className="inline-form">
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="家人的邮箱" aria-label="家人的邮箱" required />
-        <button className="primary-button">添加</button>
-      </form>
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <p className="muted small">家人用这个邮箱注册并完成验证后，就会自动进入这个家。</p>
-      <div className="panel-links"><button onClick={data.logOut}>退出登录（{account.email}）</button></div>
-    </Dialog>
-  );
-}
-
-function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <section className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
-        <div className="modal-header"><h2>{title}</h2><button onClick={onClose} aria-label="关闭">×</button></div>
-        {children}
-      </section>
-    </div>
-  );
-}
-
-function Empty({ title, hint }: { title: string; hint?: string }) {
-  return <div className="empty-state"><h3>{title}</h3>{hint && <p>{hint}</p>}</div>;
-}
-
-function useOnline() {
-  const [online, setOnline] = useState(navigator.onLine);
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    window.addEventListener('online', update);
-    window.addEventListener('offline', update);
-    return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
-  }, []);
-  return online;
 }

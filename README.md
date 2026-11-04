@@ -24,6 +24,8 @@ npm run dev
 - `src/data.ts`：所有 Firebase 读写都在这里。
 - `src/logic.ts`：补货、临期、搜索和排序规则。
 - `src/Inventory.tsx`：库存主页和弹窗。
+- `src/Ledger.tsx`：共享记账，金额以分为单位保存。
+- `src/Common.tsx`：顶部栏、成员管理、弹窗等公共组件。
 - `src/AuthScreens.tsx`：登录、邮箱验证和创建家庭。
 - `firestore.rules`：只有已验证邮箱且在 `memberEmails` 里的成员能访问数据。
 - `tests/fakeData.ts`：`vite --mode fake` 使用的内存数据，只用于界面测试，地址加 `?seed=1` 可载入示例。

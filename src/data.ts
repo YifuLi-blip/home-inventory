@@ -9,7 +9,7 @@ import {
   persistentLocalCache, persistentMultipleTabManager, query, serverTimestamp,
   setDoc, updateDoc, where,
 } from 'firebase/firestore';
-import type { Account, Household, Item, ItemInput } from './types';
+import type { Account, Expense, ExpenseInput, Household, Item, ItemInput } from './types';
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -33,6 +33,7 @@ const toAccount = (user: User): Account => ({
 });
 
 const itemsRef = (householdId: string) => collection(db, 'households', householdId, 'items');
+const expensesRef = (householdId: string) => collection(db, 'households', householdId, 'expenses');
 const audit = () => ({ updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.uid });
 
 export function watchAccount(callback: (account: Account | null) => void) {
@@ -115,3 +116,32 @@ export const changeQuantity = (householdId: string, id: string, delta: number) =
 
 export const deleteItem = (householdId: string, id: string) =>
   deleteDoc(doc(itemsRef(householdId), id));
+
+/** month 为 YYYY-MM，日期是零填充字符串，可以直接按字典序筛选。 */
+export function watchExpenses(
+  householdId: string,
+  month: string,
+  callback: (expenses: Expense[]) => void,
+  onError: (error: Error) => void,
+) {
+  const inMonth = query(
+    expensesRef(householdId),
+    where('date', '>=', `${month}-01`),
+    where('date', '<=', `${month}-31`),
+  );
+  return onSnapshot(inMonth, (snapshot) => {
+    callback(snapshot.docs.map((entry) => {
+      const { amountCents, category, note, date, paidBy } = entry.data();
+      return { id: entry.id, amountCents, category, note, date, paidBy };
+    }));
+  }, onError);
+}
+
+export const addExpense = (householdId: string, expense: ExpenseInput) =>
+  addDoc(expensesRef(householdId), { ...expense, ...audit() }).then(() => undefined);
+
+export const updateExpense = (householdId: string, id: string, expense: ExpenseInput) =>
+  setDoc(doc(expensesRef(householdId), id), { ...expense, ...audit() });
+
+export const deleteExpense = (householdId: string, id: string) =>
+  deleteDoc(doc(expensesRef(householdId), id));

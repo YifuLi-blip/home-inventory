@@ -1,4 +1,4 @@
-import type { Item } from './types';
+import type { Expense, Item } from './types';
 
 export const CATEGORIES = ['食品', '清洁用品', '个护用品', '宠物用品', '日用杂物'];
 export const EXPIRY_WARNING_DAYS = 14;
@@ -75,3 +75,56 @@ export function formatExpiry(state: ExpiryState) {
   if (state.days === 0) return '今天到期';
   return `${state.days} 天后到期`;
 }
+
+export const EXPENSE_CATEGORIES = ['买菜', '餐饮', '日用', '房租', '水电网', '交通', '娱乐', '其他'];
+
+const EXPENSE_ICONS: Record<string, string> = {
+  买菜: '🥦', 餐饮: '🍜', 日用: '🧴', 房租: '🏠', 水电网: '💡', 交通: '🚇', 娱乐: '🎬', 其他: '🧾',
+};
+
+export const expenseIcon = (category: string) => EXPENSE_ICONS[category] ?? '🧾';
+
+/** '12.3' -> 1230；无效或不大于 0 时返回 null。用字符串运算避免 0.1 + 0.2 式的误差。 */
+export function parseAmount(value: string): number | null {
+  const match = /^(\d{1,7})(?:\.(\d{0,2}))?$/.exec(value.trim());
+  if (!match) return null;
+  const cents = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
+  return cents > 0 ? cents : null;
+}
+
+export function formatMoney(cents: number) {
+  return `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export const centsToInput = (cents: number) => (cents / 100).toFixed(2);
+
+/** 'YYYY-MM' 的月份加减，只做整数运算，不受时区影响。 */
+export function shiftMonth(month: string, delta: number) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const index = year * 12 + (monthNumber - 1) + delta;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
+}
+
+export function formatMonth(month: string) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return `${year}年${monthNumber}月`;
+}
+
+export const displayName = (email: string) => email.split('@')[0];
+
+function totalsBy(expenses: Expense[], key: (expense: Expense) => string) {
+  const totals = new Map<string, number>();
+  for (const expense of expenses) totals.set(key(expense), (totals.get(key(expense)) ?? 0) + expense.amountCents);
+  return [...totals].map(([name, cents]) => ({ name, cents })).sort((a, b) => b.cents - a.cents || a.name.localeCompare(b.name));
+}
+
+export function summarizeExpenses(expenses: Expense[]) {
+  return {
+    total: expenses.reduce((sum, expense) => sum + expense.amountCents, 0),
+    byCategory: totalsBy(expenses, (expense) => expense.category),
+    byPayer: totalsBy(expenses, (expense) => expense.paidBy),
+  };
+}
+
+export const sortExpenses = (expenses: Expense[]) =>
+  [...expenses].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));

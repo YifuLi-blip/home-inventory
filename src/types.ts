@@ -23,3 +23,15 @@ export type Account = {
   email: string;
   verified: boolean;
 };
+
+export type ExpenseInput = {
+  /** 金额以分保存，避免浮点误差。 */
+  amountCents: number;
+  category: string;
+  note: string;
+  /** YYYY-MM-DD */
+  date: string;
+  paidBy: string;
+};
+
+export type Expense = ExpenseInput & { id: string };

@@ -116,3 +116,35 @@ describe('物品', () => {
     await assertFails(setDoc(newItemRef(amy()), itemData('amy', { name: '' })));
   });
 });
+
+describe('账目', () => {
+  const expenseData = (uid: string, over = {}) => ({
+    amountCents: 1234, category: '买菜', note: 'Costco', date: '2026-11-03',
+    paidBy: amyEmail, updatedAt: serverTimestamp(), updatedBy: uid, ...over,
+  });
+  const expenseRef = (db: ReturnType<typeof noah>) => doc(db, 'households', HOME, 'expenses', 'e1');
+
+  it('成员可以增删改，并能按月查询', async () => {
+    await assertSucceeds(setDoc(expenseRef(amy()), expenseData('amy')));
+    await assertSucceeds(setDoc(expenseRef(noah()), expenseData('noah', { amountCents: 999 })));
+    const db = noah();
+    await assertSucceeds(getDocs(query(
+      collection(db, 'households', HOME, 'expenses'),
+      where('date', '>=', '2026-11-01'), where('date', '<=', '2026-11-31'),
+    )));
+    await assertSucceeds(deleteDoc(expenseRef(noah())));
+  });
+  it('外人和未验证账号不能读写', async () => {
+    await assertFails(setDoc(expenseRef(stranger()), expenseData('eve')));
+    await assertFails(getDocs(collection(stranger(), 'households', HOME, 'expenses')));
+    await assertFails(setDoc(expenseRef(as('fake', amyEmail, false)), expenseData('fake')));
+  });
+  it('拒绝非法金额、日期和冒名修改', async () => {
+    await assertFails(setDoc(expenseRef(amy()), expenseData('amy', { amountCents: 0 })));
+    await assertFails(setDoc(expenseRef(amy()), expenseData('amy', { amountCents: -5 })));
+    await assertFails(setDoc(expenseRef(amy()), expenseData('amy', { amountCents: 12.5 })));
+    await assertFails(setDoc(expenseRef(amy()), expenseData('amy', { date: 'today' })));
+    await assertFails(setDoc(expenseRef(amy()), expenseData('noah')));
+    await assertFails(setDoc(expenseRef(amy()), expenseData('amy', { extra: true })));
+  });
+});

@@ -37,6 +37,18 @@ service cloud.firestore {
         && data.updatedBy == request.auth.uid;
     }
 
+    function validExpense(data) {
+      return data.keys().hasOnly(['amountCents', 'category', 'note', 'date', 'paidBy', 'updatedAt', 'updatedBy'])
+        && data.keys().hasAll(['amountCents', 'category', 'note', 'date', 'paidBy', 'updatedAt', 'updatedBy'])
+        && data.amountCents is int && data.amountCents > 0 && data.amountCents < 1000000000
+        && data.category is string && data.category.size() > 0 && data.category.size() <= 30
+        && data.note is string && data.note.size() <= 100
+        && data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.paidBy is string && data.paidBy.size() > 0 && data.paidBy.size() <= 254
+        && data.updatedAt == request.time
+        && data.updatedBy == request.auth.uid;
+    }
+
     match /households/{householdId} {
       allow read: if verifiedEmail() && request.auth.token.email in resource.data.memberEmails;
 
@@ -54,6 +66,11 @@ service cloud.firestore {
       match /items/{itemId} {
         allow read, delete: if isMember(householdId);
         allow create, update: if isMember(householdId) && validItem(request.resource.data);
+      }
+
+      match /expenses/{expenseId} {
+        allow read, delete: if isMember(householdId);
+        allow create, update: if isMember(householdId) && validExpense(request.resource.data);
       }
     }
   }

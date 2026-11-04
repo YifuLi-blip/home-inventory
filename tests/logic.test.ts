@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { expiryState, filterItems, formatExpiry, isLow, normalizeEmail, sortItems } from '../src/logic';
-import type { Item } from '../src/types';
+import {
+  expiryState, filterItems, formatExpiry, formatMoney, isLow, normalizeEmail, parseAmount,
+  shiftMonth, sortExpenses, sortItems, summarizeExpenses,
+} from '../src/logic';
+import type { Expense, Item } from '../src/types';
 
 const item = (over: Partial<Item>): Item => ({
   id: over.name ?? 'x', name: '牙膏', category: '个护用品', location: '浴室',
@@ -55,4 +58,41 @@ it('sortItems 把最紧急的排前面', () => {
 
 it('normalizeEmail 与 Firebase token 的小写邮箱一致', () => {
   expect(normalizeEmail('  Amy@Gmail.COM ')).toBe('amy@gmail.com');
+});
+
+describe('金额', () => {
+  it.each([['12', 1200], ['12.3', 1230], ['12.34', 1234], ['0.01', 1], ['19.99', 1999], [' 5. ', 500]])('解析 %s', (input, cents) => {
+    expect(parseAmount(input)).toBe(cents);
+  });
+  it.each(['', '0', '0.00', '-1', 'abc', '1.234', '1,50', '12345678'])('拒绝 %s', (input) => {
+    expect(parseAmount(input)).toBeNull();
+  });
+  it('格式化', () => {
+    expect(formatMoney(150000)).toBe('$1,500.00');
+    expect(formatMoney(5)).toBe('$0.05');
+  });
+});
+
+describe('shiftMonth', () => {
+  it('跨年', () => {
+    expect(shiftMonth('2026-12', 1)).toBe('2027-01');
+    expect(shiftMonth('2026-01', -1)).toBe('2025-12');
+  });
+  it('普通月份', () => expect(shiftMonth('2026-11', -1)).toBe('2026-10'));
+});
+
+describe('账目汇总', () => {
+  const expense = (id: string, amountCents: number, category: string, paidBy: string, date = '2026-11-01'): Expense =>
+    ({ id, amountCents, category, paidBy, date, note: '' });
+  const list = [expense('a', 10, '买菜', 'n', '2026-11-01'), expense('b', 20, '餐饮', 'a', '2026-11-03'), expense('c', 5, '买菜', 'a', '2026-11-02')];
+
+  it('总额、分类和付款人', () => {
+    expect(summarizeExpenses(list)).toEqual({
+      total: 35,
+      byCategory: [{ name: '餐饮', cents: 20 }, { name: '买菜', cents: 15 }],
+      byPayer: [{ name: 'a', cents: 25 }, { name: 'n', cents: 10 }],
+    });
+  });
+  it('空账单', () => expect(summarizeExpenses([])).toEqual({ total: 0, byCategory: [], byPayer: [] }));
+  it('按日期倒序', () => expect(sortExpenses(list).map((e) => e.id)).toEqual(['b', 'c', 'a']));
 });

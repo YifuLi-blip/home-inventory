@@ -1,19 +1,22 @@
 // 只用于 `vite --mode fake` 的界面测试：与 src/data.ts 相同的接口，数据放在内存里。
-import type { Account, Household, Item, ItemInput } from '../src/types';
+import type { Account, Expense, ExpenseInput, Household, Item, ItemInput } from '../src/types';
 
 type Listener<T> = (value: T) => void;
 const params = new URLSearchParams(location.search);
 let account: Account | null = null;
 let households: Household[] = [];
 let items: Item[] = [];
+let expenses: Expense[] = [];
 const accountListeners = new Set<Listener<Account | null>>();
 const householdListeners = new Set<Listener<Household[]>>();
 const itemListeners = new Set<Listener<Item[]>>();
+const expenseListeners = new Map<Listener<Expense[]>, string>();
 
 const emit = () => {
   accountListeners.forEach((listener) => listener(account));
   householdListeners.forEach((listener) => listener(households));
   itemListeners.forEach((listener) => listener(items));
+  expenseListeners.forEach((month, listener) => listener(expenses.filter((entry) => entry.date.startsWith(month))));
 };
 const watch = <T>(set: Set<Listener<T>>, listener: Listener<T>, value: T) => {
   set.add(listener); listener(value);
@@ -23,6 +26,15 @@ const addDays = (days: number) => {
   const date = new Date(); date.setDate(date.getDate() + days);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
+
+export function watchExpenses(_id: string, month: string, callback: Listener<Expense[]>, _onError: (error: Error) => void) {
+  expenseListeners.set(callback, month);
+  callback(expenses.filter((entry) => entry.date.startsWith(month)));
+  return () => { expenseListeners.delete(callback); };
+}
+export async function addExpense(_id: string, input: ExpenseInput) { expenses = [...expenses, { ...input, id: String(Date.now()) }]; emit(); }
+export async function updateExpense(_h: string, id: string, input: ExpenseInput) { expenses = expenses.map((entry) => entry.id === id ? { ...input, id } : entry); emit(); }
+export async function deleteExpense(_h: string, id: string) { expenses = expenses.filter((entry) => entry.id !== id); emit(); }
 
 if (params.get('seed')) {
   account = { uid: 'u1', email: 'noah@example.com', verified: true };
@@ -35,6 +47,11 @@ if (params.get('seed')) {
     { ...base, id: '4', name: '酸奶', category: '食品', location: '冰箱', quantity: 2, unit: '杯', minimum: 2, expiryDate: addDays(-2) },
     { ...base, id: '5', name: 'AA 电池', category: '日用杂物', location: '客厅抽屉', quantity: 8, unit: '节' },
     { ...base, id: '6', name: '一个名字特别特别特别长的家庭装洗衣液补充包', category: '清洁用品', location: '阳台储物架最上面那一层', quantity: 12, unit: '瓶', minimum: 2 },
+  ];
+  expenses = [
+    { id: 'e1', amountCents: 8642, category: '买菜', note: 'Costco', date: addDays(0), paidBy: 'noah@example.com' },
+    { id: 'e2', amountCents: 3250, category: '餐饮', note: '', date: addDays(0), paidBy: 'amy@example.com' },
+    { id: 'e3', amountCents: 150000, category: '房租', note: '一条特别特别特别长的备注，用来检查手机上的换行效果', date: addDays(0), paidBy: 'noah@example.com' },
   ];
 }
 
