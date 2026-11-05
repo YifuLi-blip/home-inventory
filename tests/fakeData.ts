@@ -49,8 +49,8 @@ if (params.get('seed')) {
     { ...base, id: '6', name: '一个名字特别特别特别长的家庭装洗衣液补充包', category: '清洁用品', location: '阳台储物架最上面那一层', quantity: 12, unit: '瓶', minimum: 2 },
   ];
   expenses = [
-    { id: 'e1', amountCents: 8642, category: '买菜', note: 'Costco', date: addDays(0), paidBy: 'noah@example.com' },
-    { id: 'e2', amountCents: 3250, category: '餐饮', note: '', date: addDays(0), paidBy: 'amy@example.com' },
+    { id: 'e1', amountCents: 8642, category: '買菜', note: 'Costco', date: addDays(0), paidBy: 'noah@example.com' },
+    { id: 'e2', amountCents: 3250, category: '餐飲', note: '', date: addDays(0), paidBy: 'amy@example.com' },
     { id: 'e3', amountCents: 150000, category: '房租', note: '一条特别特别特别长的备注，用来检查手机上的换行效果', date: addDays(0), paidBy: 'noah@example.com' },
   ];
 }
@@ -65,6 +65,9 @@ export async function refreshAccount() { if (account) account = { ...account, ve
 export const watchHouseholds = (_email: string, callback: Listener<Household[]>, _onError: (error: Error) => void) => watch(householdListeners, callback, households);
 export async function createHousehold(name: string, owner: Account) {
   households = [{ id: 'h1', name, ownerEmail: owner.email, memberEmails: [owner.email] }]; emit();
+}
+export async function saveCategories(id: string, field: 'ledgerCategories' | 'itemCategories', categories: string[]) {
+  households = households.map((entry) => entry.id === id ? { ...entry, [field]: categories } : entry); emit();
 }
 export async function saveMembers(id: string, memberEmails: string[]) {
   households = households.map((entry) => entry.id === id ? { ...entry, memberEmails } : entry); emit();

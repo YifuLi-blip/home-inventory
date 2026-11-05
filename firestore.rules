@@ -14,12 +14,21 @@ service cloud.firestore {
         && request.auth.token.email in get(/databases/$(database)/documents/households/$(householdId)).data.memberEmails;
     }
 
+    function validCategories(data, key) {
+      return data.get(key, ['默认']) is list
+        && data.get(key, ['默认']).size() > 0
+        && data.get(key, ['默认']).size() <= 30;
+    }
+
     function validHousehold(data) {
-      return data.keys().hasOnly(['name', 'ownerUid', 'ownerEmail', 'memberEmails', 'createdAt'])
+      return data.keys().hasOnly(['name', 'ownerUid', 'ownerEmail', 'memberEmails', 'createdAt', 'expenseCategories', 'ledgerCategories', 'itemCategories'])
         && data.keys().hasAll(['name', 'ownerUid', 'ownerEmail', 'memberEmails', 'createdAt'])
         && data.name is string && data.name.size() > 0 && data.name.size() <= 40
         && data.memberEmails is list && data.memberEmails.size() <= 20
-        && data.ownerEmail in data.memberEmails;
+        && data.ownerEmail in data.memberEmails
+        && validCategories(data, 'expenseCategories')
+        && validCategories(data, 'ledgerCategories')
+        && validCategories(data, 'itemCategories');
     }
 
     function validItem(data) {
@@ -61,7 +70,7 @@ service cloud.firestore {
       allow update: if verifiedEmail()
         && request.auth.token.email in resource.data.memberEmails
         && validHousehold(request.resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'memberEmails']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'memberEmails', 'ledgerCategories', 'itemCategories']);
 
       match /items/{itemId} {
         allow read, delete: if isMember(householdId);

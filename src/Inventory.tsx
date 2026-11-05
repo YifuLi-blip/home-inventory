@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AppHeader, Dialog, Empty, Toast } from './Common';
+import { AppHeader, CategoryDialog, Dialog, Empty, Toast } from './Common';
 import * as data from './data';
 import {
-  CATEGORIES, expiryState, filterItems, formatExpiry, iconFor, isExpiring, isLow,
-  localDate, sortItems, type ViewFilter,
+  CATEGORIES, categoryLabel, expiryState, filterItems, formatExpiry, iconFor, isExpiring, isLow,
+  localDate, sortItems, withUsedCategories, type ViewFilter,
 } from './logic';
 import type { Account, Household, Item, ItemInput } from './types';
 
@@ -15,6 +15,7 @@ export function Inventory({ account, household }: { account: Account; household:
   const [category, setCategory] = useState('全部');
   const [view, setView] = useState<ViewFilter>('all');
   const [editing, setEditing] = useState<Editing>(null);
+  const [managing, setManaging] = useState(false);
   const [toast, setToast] = useState('');
   const today = localDate();
 
@@ -27,12 +28,19 @@ export function Inventory({ account, household }: { account: Account; household:
   const guard = (write: Promise<unknown>) => { write.catch(() => setToast('保存失败，改动已撤销。')); };
 
   const all = items ?? [];
+  const categories = household.itemCategories ?? CATEGORIES;
+  // 删除后仍有物品在用的分类继续显示；没人用的分类被删除时自动回到“全部”。
+  const filterOptions = useMemo(
+    () => withUsedCategories(categories, all.map((item) => item.category)),
+    [categories, all],
+  );
+  const activeCategory = filterOptions.includes(category) ? category : '全部';
   const lowCount = all.filter(isLow).length;
   const expiringCount = all.filter((item) => isExpiring(item, today)).length;
   const locations = useMemo(() => [...new Set(all.map((item) => item.location).filter(Boolean))].sort(), [all]);
   const visible = useMemo(
-    () => sortItems(filterItems(all, { query, category, view, today }), today),
-    [all, query, category, view, today],
+    () => sortItems(filterItems(all, { query, category: activeCategory, view, today }), today),
+    [all, query, activeCategory, view, today],
   );
 
   const toggleView = (next: ViewFilter) => setView(view === next ? 'all' : next);
@@ -60,9 +68,10 @@ export function Inventory({ account, household }: { account: Account; household:
         </div>
 
         <div className="chips" role="group" aria-label="按分类筛选">
-          {['全部', ...CATEGORIES].map((name) => (
-            <button key={name} className={category === name ? 'chip active' : 'chip'} aria-pressed={category === name} onClick={() => setCategory(name)}>{name}</button>
+          {['全部', ...filterOptions].map((name) => (
+            <button key={name} className={activeCategory === name ? 'chip active' : 'chip'} aria-pressed={activeCategory === name} onClick={() => setCategory(name)}>{name === '全部' ? name : `${iconFor(name)} ${categoryLabel(name)}`}</button>
           ))}
+          <button className="chip" onClick={() => setManaging(true)}>管理分类</button>
         </div>
 
         <div className="inventory-list">
@@ -85,6 +94,7 @@ export function Inventory({ account, household }: { account: Account; household:
         <ItemDialog
           item={editing === 'new' ? null : editing}
           locations={locations}
+          categories={categories}
           onClose={() => setEditing(null)}
           onSave={(input) => {
             guard(editing === 'new' ? data.addItem(household.id, input) : data.updateItem(household.id, editing.id, input));
@@ -94,6 +104,14 @@ export function Inventory({ account, household }: { account: Account; household:
             guard(data.deleteItem(household.id, editing.id));
             setEditing(null);
           }}
+        />
+      )}
+      {managing && (
+        <CategoryDialog
+          categories={categories}
+          iconFor={iconFor}
+          onChange={(next) => guard(data.saveCategories(household.id, 'itemCategories', next))}
+          onClose={() => setManaging(false)}
         />
       )}
       <Toast message={toast} onClose={() => setToast('')} />
@@ -110,7 +128,7 @@ function ItemRow({ item, today, onOpen, onChange }: { item: Item; today: string;
         <span className="item-emoji">{iconFor(item.category)}</span>
         <span className="item-text">
           <strong>{item.name}</strong>
-          <small>{item.location || item.category}</small>
+          <small>{item.location || categoryLabel(item.category)}</small>
           {(isLow(item) || expiryUrgent) && (
             <span className="badges">
               {isLow(item) && <span className="status low">需要补货</span>}
@@ -128,11 +146,12 @@ function ItemRow({ item, today, onOpen, onChange }: { item: Item; today: string;
   );
 }
 
-function ItemDialog({ item, locations, onClose, onSave, onDelete }: {
-  item: Item | null; locations: string[]; onClose: () => void;
+function ItemDialog({ item, locations, categories, onClose, onSave, onDelete }: {
+  item: Item | null; locations: string[]; categories: string[]; onClose: () => void;
   onSave: (input: ItemInput) => void; onDelete?: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const categoryOptions = withUsedCategories(categories, item ? [item.category] : []);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -152,7 +171,7 @@ function ItemDialog({ item, locations, onClose, onSave, onDelete }: {
     <Dialog title={item ? '编辑物品' : '添加物品'} onClose={onClose}>
       <form onSubmit={submit} className="item-form">
         <label className="wide">物品名称<input name="name" defaultValue={item?.name} maxLength={80} placeholder="例如：洗手液" required autoFocus={!item} /></label>
-        <label>分类<select name="category" defaultValue={item?.category ?? CATEGORIES[0]}>{CATEGORIES.map((name) => <option key={name}>{name}</option>)}</select></label>
+        <label>分类<select name="category" defaultValue={item?.category ?? categoryOptions[0]}>{categoryOptions.map((name) => <option key={name} value={name}>{iconFor(name)} {categoryLabel(name)}</option>)}</select></label>
         <label>存放位置
           <input name="location" list="known-locations" defaultValue={item?.location} maxLength={80} placeholder="例如：浴室镜柜" />
           <datalist id="known-locations">{locations.map((name) => <option key={name} value={name} />)}</datalist>

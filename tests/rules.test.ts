@@ -92,6 +92,24 @@ describe('家庭', () => {
     await assertFails(updateDoc(householdRef(amy()), { memberEmails: [amyEmail] }));
     await assertFails(updateDoc(householdRef(amy()), { ownerUid: 'amy' }));
   });
+  it('成员可以修改两类分类，外人不行', async () => {
+    await assertSucceeds(updateDoc(householdRef(amy()), { ledgerCategories: ['買菜', '🐾寵物'] }));
+    await assertSucceeds(updateDoc(householdRef(amy()), { itemCategories: ['食品', '🐾寵物'] }));
+    await assertFails(updateDoc(householdRef(stranger()), { ledgerCategories: ['黑客'] }));
+  });
+  it('分类必须是 1 到 30 项的列表', async () => {
+    for (const field of ['ledgerCategories', 'itemCategories']) {
+      await assertFails(updateDoc(householdRef(amy()), { [field]: 'x' }));
+      await assertFails(updateDoc(householdRef(amy()), { [field]: [] }));
+      await assertFails(updateDoc(householdRef(amy()), { [field]: Array(31).fill('x') }));
+    }
+  });
+  it('已有旧分类字段的家庭仍可更新', async () => {
+    await env.withSecurityRulesDisabled((context) =>
+      updateDoc(doc(context.firestore(), 'households', HOME), { expenseCategories: ['买菜'] }));
+    await assertSucceeds(updateDoc(householdRef(amy()), { ledgerCategories: ['買菜'] }));
+    await assertFails(updateDoc(householdRef(amy()), { expenseCategories: ['x'] }));
+  });
   it('客户端不能删除家庭', () => assertFails(deleteDoc(householdRef(noah()))));
 });
 

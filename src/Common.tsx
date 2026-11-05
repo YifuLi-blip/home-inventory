@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import * as data from './data';
-import { normalizeEmail } from './logic';
+import { addCategory, categoryLabel, normalizeEmail } from './logic';
 import type { Account, Household } from './types';
 
 export function AppHeader({ account, household, children }: { account: Account; household: Household; children?: ReactNode }) {
@@ -70,6 +70,40 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
         {children}
       </section>
     </div>
+  );
+}
+
+export function CategoryDialog({ categories, iconFor, onChange, onClose }: {
+  categories: string[]; iconFor: (category: string) => string; onChange: (categories: string[]) => void; onClose: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+
+  function add(event: FormEvent) {
+    event.preventDefault();
+    const result = addCategory(categories, name);
+    if ('error' in result) { setError(result.error); return; }
+    setError(''); setName('');
+    onChange(result.categories);
+  }
+
+  return (
+    <Dialog title="管理分类" onClose={onClose}>
+      <ul className="members">
+        {categories.map((category) => (
+          <li key={category}>
+            <span>{iconFor(category)} {categoryLabel(category)}</span>
+            {categories.length > 1 && <button onClick={() => onChange(categories.filter((entry) => entry !== category))} aria-label={`删除分类 ${category}`}>删除</button>}
+          </li>
+        ))}
+      </ul>
+      <form onSubmit={add} className="inline-form">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="新分类名称" aria-label="新分类名称" />
+        <button className="primary-button">添加</button>
+      </form>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <p className="muted small">分类全家共用。名称前可以加 emoji，例如 🐾寵物。删除分类不会影响已有记录。</p>
+    </Dialog>
   );
 }
 

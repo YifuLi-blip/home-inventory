@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AppHeader, Dialog, Empty, Toast } from './Common';
+import { AppHeader, CategoryDialog, Dialog, Empty, Toast } from './Common';
 import * as data from './data';
 import {
-  EXPENSE_CATEGORIES, centsToInput, displayName, expenseIcon, formatMoney, formatMonth,
-  localDate, parseAmount, shiftMonth, sortExpenses, summarizeExpenses,
+  EXPENSE_CATEGORIES, categoryLabel, centsToInput, displayName, expenseIcon, formatMoney, formatMonth,
+  localDate, parseAmount, shiftMonth, sortExpenses, summarizeExpenses, withUsedCategories,
 } from './logic';
 import type { Account, Expense, ExpenseInput, Household } from './types';
 
@@ -14,6 +14,7 @@ export function Ledger({ account, household }: { account: Account; household: Ho
   const [month, setMonth] = useState(thisMonth);
   const [loaded, setLoaded] = useState<{ month: string; expenses: Expense[] } | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
+  const [managing, setManaging] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(
@@ -31,6 +32,7 @@ export function Ledger({ account, household }: { account: Account; household: Ho
   const expenses = useMemo(() => (loaded?.month === month ? loaded.expenses : undefined), [loaded, month]);
   const list = useMemo(() => sortExpenses(expenses ?? []), [expenses]);
   const summary = useMemo(() => summarizeExpenses(expenses ?? []), [expenses]);
+  const categories = household.ledgerCategories ?? EXPENSE_CATEGORIES;
   const largest = summary.byCategory[0]?.cents ?? 1;
 
   return (
@@ -57,7 +59,7 @@ export function Ledger({ account, household }: { account: Account; household: Ho
           <div className="breakdown" aria-label="分类汇总">
             {summary.byCategory.map(({ name, cents }) => (
               <div className="breakdown-row" key={name}>
-                <span>{expenseIcon(name)} {name}</span>
+                <span>{expenseIcon(name)} {categoryLabel(name)}</span>
                 <strong>{formatMoney(cents)}</strong>
                 <div className="bar"><i style={{ width: `${(cents / largest) * 100}%` }} /></div>
               </div>
@@ -65,14 +67,16 @@ export function Ledger({ account, household }: { account: Account; household: Ho
           </div>
         )}
 
+        <div className="ledger-actions"><button onClick={() => setManaging(true)}>管理分类</button></div>
+
         <div className="inventory-list">
           {expenses === undefined ? <Empty title="正在读取…" />
             : list.length === 0 ? <Empty title="这个月还没有账目" hint="点右下角的 ＋，记下第一笔。" />
             : list.map((expense) => (
-              <button className="expense-row" key={expense.id} onClick={() => setEditing(expense)} aria-label={`编辑 ${expense.category} ${formatMoney(expense.amountCents)}`}>
+              <button className="expense-row" key={expense.id} onClick={() => setEditing(expense)} aria-label={`编辑 ${categoryLabel(expense.category)} ${formatMoney(expense.amountCents)}`}>
                 <span className="item-emoji">{expenseIcon(expense.category)}</span>
                 <span className="item-text">
-                  <strong>{expense.note || expense.category}</strong>
+                  <strong>{expense.note || categoryLabel(expense.category)}</strong>
                   <small>{expense.date.slice(5).replace('-', '/')} · {displayName(expense.paidBy)}</small>
                 </span>
                 <strong>{formatMoney(expense.amountCents)}</strong>
@@ -87,6 +91,7 @@ export function Ledger({ account, household }: { account: Account; household: Ho
         <ExpenseDialog
           expense={editing === 'new' ? null : editing}
           members={household.memberEmails}
+          categories={categories}
           currentEmail={account.email}
           onClose={() => setEditing(null)}
           onSave={(input) => {
@@ -99,18 +104,27 @@ export function Ledger({ account, household }: { account: Account; household: Ho
           }}
         />
       )}
+      {managing && (
+        <CategoryDialog
+          categories={categories}
+          iconFor={expenseIcon}
+          onChange={(next) => guard(data.saveCategories(household.id, 'ledgerCategories', next))}
+          onClose={() => setManaging(false)}
+        />
+      )}
       <Toast message={toast} onClose={() => setToast('')} />
     </main>
   );
 }
 
-function ExpenseDialog({ expense, members, currentEmail, onClose, onSave, onDelete }: {
-  expense: Expense | null; members: string[]; currentEmail: string; onClose: () => void;
+function ExpenseDialog({ expense, members, categories, currentEmail, onClose, onSave, onDelete }: {
+  expense: Expense | null; members: string[]; categories: string[]; currentEmail: string; onClose: () => void;
   onSave: (input: ExpenseInput) => void; onDelete?: () => void;
 }) {
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
   // 已被移除的成员也要留在选项里，否则编辑旧账目时付款人会被改掉。
+  const categoryOptions = withUsedCategories(categories, expense ? [expense.category] : []);
   const payers = expense && !members.includes(expense.paidBy) ? [...members, expense.paidBy] : members;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -131,7 +145,7 @@ function ExpenseDialog({ expense, members, currentEmail, onClose, onSave, onDele
     <Dialog title={expense ? '编辑账目' : '记一笔'} onClose={onClose}>
       <form onSubmit={submit} className="item-form">
         <label className="wide">金额（CAD）<input name="amount" inputMode="decimal" defaultValue={expense ? centsToInput(expense.amountCents) : ''} placeholder="0.00" required autoFocus={!expense} /></label>
-        <label>分类<select name="category" defaultValue={expense?.category ?? EXPENSE_CATEGORIES[0]}>{EXPENSE_CATEGORIES.map((name) => <option key={name}>{name}</option>)}</select></label>
+        <label>分类<select name="category" defaultValue={expense?.category ?? categoryOptions[0]}>{categoryOptions.map((name) => <option key={name} value={name}>{expenseIcon(name)} {categoryLabel(name)}</option>)}</select></label>
         <label>日期<input name="date" type="date" defaultValue={expense?.date ?? localDate()} required /></label>
         <label className="wide">谁付的<select name="paidBy" defaultValue={expense?.paidBy ?? currentEmail}>{payers.map((email) => <option key={email} value={email}>{displayName(email)}</option>)}</select></label>
         <label className="wide">备注（可不填）<input name="note" defaultValue={expense?.note} maxLength={100} placeholder="例如：Costco" /></label>

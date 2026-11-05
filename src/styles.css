@@ -114,6 +114,8 @@ input[type=date] { -webkit-appearance:none; appearance:none; }
 .breakdown-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px 10px; padding:9px 0; font-size:14px; }
 .bar { grid-column:1/-1; height:7px; border-radius:4px; background:#eff0ea; overflow:hidden; }
 .bar i { display:block; height:100%; border-radius:4px; background:var(--green); }
+.ledger-actions { display:flex; justify-content:flex-end; margin:-4px 0 8px; }
+.ledger-actions button { border:0; background:none; min-height:36px; padding:0; color:var(--green-dark); font-size:14px; text-decoration:underline; text-underline-offset:3px; }
 .expense-row { width:100%; display:flex; align-items:center; gap:11px; border:0; border-top:1px solid #f0f1ec; background:none; padding:11px 12px; text-align:left; }
 .inventory-list > .expense-row:first-child { border-top:0; }
 .expense-row > strong { flex:none; font-size:15px; }

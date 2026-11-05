@@ -9,6 +9,7 @@ import {
   persistentLocalCache, persistentMultipleTabManager, query, serverTimestamp,
   setDoc, updateDoc, where,
 } from 'firebase/firestore';
+import { normalizeExpenseCategory } from './logic';
 import type { Account, Expense, ExpenseInput, Household, Item, ItemInput } from './types';
 
 const app = initializeApp({
@@ -72,8 +73,8 @@ export function watchHouseholds(
   const memberOf = query(collection(db, 'households'), where('memberEmails', 'array-contains', email));
   return onSnapshot(memberOf, (snapshot) => {
     callback(snapshot.docs.map((entry) => {
-      const { name, ownerEmail, memberEmails } = entry.data();
-      return { id: entry.id, name, ownerEmail, memberEmails };
+      const { name, ownerEmail, memberEmails, ledgerCategories, itemCategories } = entry.data();
+      return { id: entry.id, name, ownerEmail, memberEmails, ledgerCategories, itemCategories };
     }).sort((a, b) => a.id.localeCompare(b.id)));
   }, onError);
 }
@@ -90,6 +91,9 @@ export async function createHousehold(name: string, account: Account) {
 
 export const saveMembers = (householdId: string, memberEmails: string[]) =>
   updateDoc(doc(db, 'households', householdId), { memberEmails });
+
+export const saveCategories = (householdId: string, field: 'ledgerCategories' | 'itemCategories', categories: string[]) =>
+  updateDoc(doc(db, 'households', householdId), { [field]: categories });
 
 export function watchItems(
   householdId: string,
@@ -132,7 +136,7 @@ export function watchExpenses(
   return onSnapshot(inMonth, (snapshot) => {
     callback(snapshot.docs.map((entry) => {
       const { amountCents, category, note, date, paidBy } = entry.data();
-      return { id: entry.id, amountCents, category, note, date, paidBy };
+      return { id: entry.id, amountCents, category: normalizeExpenseCategory(category), note, date, paidBy };
     }));
   }, onError);
 }

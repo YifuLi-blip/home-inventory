@@ -3,6 +3,9 @@ export type Household = {
   name: string;
   ownerEmail: string;
   memberEmails: string[];
+  /** 未自定义时为 undefined，使用默认分类。 */
+  ledgerCategories?: string[];
+  itemCategories?: string[];
 };
 
 export type ItemInput = {
