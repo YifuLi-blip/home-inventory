@@ -1,9 +1,24 @@
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(({ mode }) => ({
+const REQUIRED_ENV = [
+  'VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_STORAGE_BUCKET', 'VITE_FIREBASE_MESSAGING_SENDER_ID', 'VITE_FIREBASE_APP_ID',
+];
+
+export default defineConfig(({ command, mode }) => {
+  // 没有配置时构建照样成功，但线上网站会打不开，所以直接中止。
+  if (command === 'build' && mode !== 'fake') {
+    const env = loadEnv(mode, process.cwd(), 'VITE_');
+    const missing = REQUIRED_ENV.filter((key) => !env[key]);
+    if (missing.length > 0) {
+      throw new Error(`缺少 Firebase 配置，已中止构建：${missing.join(', ')}。请检查 .env.local。`);
+    }
+  }
+
+  return {
   resolve: {
     // `--mode fake` 用内存数据替换 Firebase，只用于界面测试。
     alias: mode === 'fake'
@@ -37,4 +52,5 @@ export default defineConfig(({ mode }) => ({
       },
     }),
   ],
-}));
+  };
+});
