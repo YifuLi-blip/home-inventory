@@ -9,7 +9,8 @@ import {
   persistentLocalCache, persistentMultipleTabManager, query, serverTimestamp,
   setDoc, updateDoc, where,
 } from 'firebase/firestore';
-import type { Account, Household, Item, ItemInput } from './types';
+import { normalizeExpenseCategory } from './logic';
+import type { Account, Expense, ExpenseInput, Household, Item, ItemInput, JournalEntry, JournalInput } from './types';
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -33,6 +34,8 @@ const toAccount = (user: User): Account => ({
 });
 
 const itemsRef = (householdId: string) => collection(db, 'households', householdId, 'items');
+const expensesRef = (householdId: string) => collection(db, 'households', householdId, 'expenses');
+const journalRef = (householdId: string) => collection(db, 'households', householdId, 'journal');
 const audit = () => ({ updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.uid });
 
 export function watchAccount(callback: (account: Account | null) => void) {
@@ -71,8 +74,8 @@ export function watchHouseholds(
   const memberOf = query(collection(db, 'households'), where('memberEmails', 'array-contains', email));
   return onSnapshot(memberOf, (snapshot) => {
     callback(snapshot.docs.map((entry) => {
-      const { name, ownerEmail, memberEmails } = entry.data();
-      return { id: entry.id, name, ownerEmail, memberEmails };
+      const { name, ownerEmail, memberEmails, ledgerCategories, itemCategories } = entry.data();
+      return { id: entry.id, name, ownerEmail, memberEmails, ledgerCategories, itemCategories };
     }).sort((a, b) => a.id.localeCompare(b.id)));
   }, onError);
 }
@@ -89,6 +92,9 @@ export async function createHousehold(name: string, account: Account) {
 
 export const saveMembers = (householdId: string, memberEmails: string[]) =>
   updateDoc(doc(db, 'households', householdId), { memberEmails });
+
+export const saveCategories = (householdId: string, field: 'ledgerCategories' | 'itemCategories', categories: string[]) =>
+  updateDoc(doc(db, 'households', householdId), { [field]: categories });
 
 export function watchItems(
   householdId: string,
@@ -115,3 +121,62 @@ export const changeQuantity = (householdId: string, id: string, delta: number) =
 
 export const deleteItem = (householdId: string, id: string) =>
   deleteDoc(doc(itemsRef(householdId), id));
+
+/** month 为 YYYY-MM，日期是零填充字符串，可以直接按字典序筛选。 */
+export function watchExpenses(
+  householdId: string,
+  month: string,
+  callback: (expenses: Expense[]) => void,
+  onError: (error: Error) => void,
+) {
+  const inMonth = query(
+    expensesRef(householdId),
+    where('date', '>=', `${month}-01`),
+    where('date', '<=', `${month}-31`),
+  );
+  return onSnapshot(inMonth, (snapshot) => {
+    callback(snapshot.docs.map((entry) => {
+      const { amountCents, category, note, date, paidBy } = entry.data();
+      return { id: entry.id, amountCents, category: normalizeExpenseCategory(category), note, date, paidBy };
+    }));
+  }, onError);
+}
+
+export const addExpense = (householdId: string, expense: ExpenseInput) =>
+  addDoc(expensesRef(householdId), { ...expense, ...audit() }).then(() => undefined);
+
+export const updateExpense = (householdId: string, id: string, expense: ExpenseInput) =>
+  setDoc(doc(expensesRef(householdId), id), { ...expense, ...audit() });
+
+export const deleteExpense = (householdId: string, id: string) =>
+  deleteDoc(doc(expensesRef(householdId), id));
+
+export function watchJournal(
+  householdId: string,
+  month: string,
+  callback: (entries: JournalEntry[]) => void,
+  onError: (error: Error) => void,
+) {
+  const inMonth = query(
+    journalRef(householdId),
+    where('date', '>=', `${month}-01`),
+    where('date', '<=', `${month}-31`),
+  );
+  return onSnapshot(inMonth, (snapshot) => {
+    callback(snapshot.docs.map((entry) => {
+      const { date, text, author, authorUid } = entry.data();
+      return { id: entry.id, date, text, author, authorUid };
+    }));
+  }, onError);
+}
+
+export const addJournal = (householdId: string, account: Account, entry: JournalInput) =>
+  addDoc(journalRef(householdId), {
+    ...entry, author: account.email, authorUid: account.uid, updatedAt: serverTimestamp(),
+  }).then(() => undefined);
+
+export const updateJournal = (householdId: string, id: string, entry: JournalInput) =>
+  updateDoc(doc(journalRef(householdId), id), { ...entry, updatedAt: serverTimestamp() });
+
+export const deleteJournal = (householdId: string, id: string) =>
+  deleteDoc(doc(journalRef(householdId), id));

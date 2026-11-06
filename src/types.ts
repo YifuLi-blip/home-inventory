@@ -3,6 +3,9 @@ export type Household = {
   name: string;
   ownerEmail: string;
   memberEmails: string[];
+  /** 未自定义时为 undefined，使用默认分类。 */
+  ledgerCategories?: string[];
+  itemCategories?: string[];
 };
 
 export type ItemInput = {
@@ -23,3 +26,23 @@ export type Account = {
   email: string;
   verified: boolean;
 };
+
+export type ExpenseInput = {
+  /** 金额以分保存，避免浮点误差。 */
+  amountCents: number;
+  category: string;
+  note: string;
+  /** YYYY-MM-DD */
+  date: string;
+  paidBy: string;
+};
+
+export type Expense = ExpenseInput & { id: string };
+
+export type JournalInput = {
+  /** YYYY-MM-DD */
+  date: string;
+  text: string;
+};
+
+export type JournalEntry = JournalInput & { id: string; author: string; authorUid: string };
